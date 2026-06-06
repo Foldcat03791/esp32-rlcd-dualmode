@@ -1,6 +1,16 @@
 esphome:
   name: rlcd-dualmode
   friendly_name: "RLCD Dual Mode"
+  on_boot:
+    priority: 600
+    then:
+      - lambda: id(g_mode) = 0;
+      - lambda: id(g_todo_idx) = 0;
+      - lambda: id(g_todo_state) = 0;
+      - lambda: id(g_work_status) = 0;
+      - lambda: id(g_work_duration) = 0;
+      - lambda: id(g_blink) = false;
+      - component.update: my_display
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -146,7 +156,7 @@ display:
     dc_pin: GPIO5
     reset_pin: GPIO41
     data_rate: 2MHz
-    update_interval: never
+    update_interval: 30s
     auto_clear_enabled: false
     lambda: |-
       // ========== 状态变量 ==========

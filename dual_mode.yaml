@@ -146,149 +146,216 @@ display:
     lambda: |-
       uint8_t mode = id(g_mode);
       uint8_t st = id(g_work_status);
-      int w = it.get_width();
-      int h = it.get_height();
+      int w = 400;
+      int h = 300;
 
-      auto bg = (mode == 1) ? COLOR_ON : COLOR_OFF;
-      auto fg = (mode == 1) ? COLOR_OFF : COLOR_ON;
+      auto bg = (mode == 1) ? COLOR_OFF : COLOR_ON;
+      auto fg = (mode == 1) ? COLOR_ON : COLOR_OFF;
 
-      // Clear screen
+      // 白底黑字 - 反射屏最佳对比度
+      bg = COLOR_OFF;
+      fg = COLOR_ON;
+
+      // 清屏
       it.fill(bg);
 
+      // ============ LIFE 模式 ============
       if (mode == 0) {
         auto now = id(my_time).now();
 
-        // Top status bar
-        it.print(12, 4, id(font_caption), fg, TextAlign::TOP_LEFT, "LIFE");
-        it.print(w - 12, 4, id(font_caption), fg, TextAlign::TOP_RIGHT, "[W]");
-        it.line(12, 22, w - 12, 22, fg);
+        // --- 顶部状态栏 y:0-22 ---
+        it.print(16, 6, id(font_caption), fg, TextAlign::TOP_LEFT, "LIFE");
+        // 电池图标
+        char bat_top[16];
+        if (id(bat_voltage).has_state()) {
+          float v = id(bat_voltage).state;
+          int bars = (v > 4.0) ? 4 : (v > 3.7) ? 3 : (v > 3.4) ? 2 : 1;
+          snprintf(bat_top, sizeof(bat_top), "[%c%c%c%c]",
+            (bars>=1)?'#':'.', (bars>=2)?'#':'.',
+            (bars>=3)?'#':'.', (bars>=4)?'#':'.');
+        } else {
+          snprintf(bat_top, sizeof(bat_top), "[....]");
+        }
+        it.print(w - 16, 6, id(font_caption), fg, TextAlign::TOP_RIGHT, bat_top);
+        // 分隔线
+        it.line(16, 22, w - 16, 22, fg);
 
-        // Time
+        // --- 时间 y:30-100 ---
         if (now.is_valid()) {
-          char buf[16];
-          snprintf(buf, sizeof(buf), "%02d:%02d", now.hour, now.minute);
-          it.print(w / 2, 32, id(font_display), fg, TextAlign::CENTER, buf);
+          char time_buf[16];
+          snprintf(time_buf, sizeof(time_buf), "%02d:%02d", now.hour, now.minute);
+          it.print(w / 2, 32, id(font_display), fg, TextAlign::TOP_CENTER, time_buf);
+        } else {
+          it.print(w / 2, 32, id(font_display), fg, TextAlign::TOP_CENTER, "--:--");
+        }
 
+        // --- 日期 y:96-118 ---
+        if (now.is_valid()) {
           char date_buf[32];
           const char* wd[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
-          snprintf(date_buf, sizeof(date_buf), "%02d/%02d %s", now.month, now.day_of_month, wd[now.day_of_week]);
-          it.print(w / 2, 68, id(font_body), fg, TextAlign::CENTER, date_buf);
+          snprintf(date_buf, sizeof(date_buf), "%04d-%02d-%02d  %s",
+                   now.year, now.month, now.day_of_month, wd[now.day_of_week]);
+          it.print(w / 2, 96, id(font_body), fg, TextAlign::TOP_CENTER, date_buf);
         } else {
-          it.print(w / 2, 32, id(font_display), fg, TextAlign::CENTER, "--:--");
-          it.print(w / 2, 68, id(font_body), fg, TextAlign::CENTER, "syncing...");
+          it.print(w / 2, 96, id(font_body), fg, TextAlign::TOP_CENTER, "syncing time...");
         }
 
-        // Env info
-        char env[48];
+        // --- 环境信息 y:122-146 ---
+        char env_buf[48];
         if (id(temp_sensor).has_state() && id(hum_sensor).has_state()) {
-          snprintf(env, sizeof(env), "%.1fC | %.0f%%", id(temp_sensor).state, id(hum_sensor).state);
+          snprintf(env_buf, sizeof(env_buf), "%.1f C    %.0f %%", id(temp_sensor).state, id(hum_sensor).state);
         } else {
-          snprintf(env, sizeof(env), "--.-C | --%%");
+          snprintf(env_buf, sizeof(env_buf), "--.- C    -- %%");
         }
-        it.print(w / 2, 96, id(font_body), fg, TextAlign::CENTER, env);
+        it.print(w / 2, 126, id(font_body), fg, TextAlign::TOP_CENTER, env_buf);
 
-        // Divider
-        it.line(12, 122, w - 12, 122, fg);
+        // 分隔线
+        it.line(16, 152, w - 16, 152, fg);
 
-        // TODO list
-        it.print(12, 128, id(font_caption), fg, TextAlign::TOP_LEFT, "TODO");
+        // --- 待办列表 y:156-232 ---
+        it.print(16, 158, id(font_caption), fg, TextAlign::TOP_LEFT, "TASKS");
 
-        const char* todos[3] = {"Buy milk", "Review PR", "Submit weekly"};
-        int todo_y = 148;
+        const char* tasks[3] = {"Buy milk", "Review PR", "Submit weekly report"};
+        int task_y = 178;
         uint8_t sel = id(g_todo_idx);
         uint8_t done_mask = id(g_todo_state);
 
         for (int i = 0; i < 3; i++) {
           bool is_done = (done_mask >> i) & 1;
           char line[48];
-          snprintf(line, sizeof(line), "%c %s", is_done ? 'x' : 'o', todos[i]);
 
           if (i == sel) {
-            it.filled_rectangle(16, todo_y - 2, w - 32, 20, fg);
-            it.print(24, todo_y, id(font_body), bg, TextAlign::TOP_LEFT, line);
+            // 选中项 - 反白背景
+            it.filled_rectangle(16, task_y - 2, w - 32, 18, fg);
+            snprintf(line, sizeof(line), "[X] %s", tasks[i]);
+            it.print(24, task_y, id(font_body), bg, TextAlign::TOP_LEFT, line);
           } else {
-            it.print(24, todo_y, id(font_body), fg, TextAlign::TOP_LEFT, line);
+            // 非选中项
+            snprintf(line, sizeof(line), "[%c] %s", is_done ? 'X' : ' ', tasks[i]);
+            it.print(24, task_y, id(font_body), fg, TextAlign::TOP_LEFT, line);
           }
-          todo_y += 22;
+          task_y += 20;
         }
 
-        // Bottom status bar
-        it.line(12, 220, w - 12, 220, fg);
+        // --- 底部状态栏 y:245-300 ---
+        it.line(16, 248, w - 16, 248, fg);
 
-        // Battery
-        char bat[20];
+        // 电池电压 (左下)
+        char bat_bottom[24];
+        if (id(bat_voltage).has_state()) {
+          snprintf(bat_bottom, sizeof(bat_bottom), "%.2fV", id(bat_voltage).state);
+        } else {
+          snprintf(bat_bottom, sizeof(bat_bottom), "--.--V");
+        }
+        it.print(16, 262, id(font_caption), fg, TextAlign::TOP_LEFT, bat_bottom);
+
+        // 操作提示 (右下)
+        it.print(w - 16, 262, id(font_caption), fg, TextAlign::TOP_RIGHT, "BOOT=Next KEY=Done");
+
+        // 模式切换提示 (底部)
+        it.print(w / 2, 282, id(font_caption), fg, TextAlign::TOP_CENTER, "BOOT long > WORK mode");
+
+      // ============ WORK 模式 ============
+      } else {
+        // --- 顶部状态栏 ---
+        it.print(16, 6, id(font_caption), fg, TextAlign::TOP_LEFT, ">> CODE <<");
+
+        char bat_top[16];
         if (id(bat_voltage).has_state()) {
           float v = id(bat_voltage).state;
           int bars = (v > 4.0) ? 4 : (v > 3.7) ? 3 : (v > 3.4) ? 2 : 1;
-          char bar_str[5];
-          for (int i = 0; i < 4; i++) bar_str[i] = (i < bars) ? '|' : ' ';
-          bar_str[4] = '\0';
-          snprintf(bat, sizeof(bat), "[%s] %.2fV", bar_str, v);
+          snprintf(bat_top, sizeof(bat_top), "[%c%c%c%c]",
+            (bars>=1)?'#':'.', (bars>=2)?'#':'.',
+            (bars>=3)?'#':'.', (bars>=4)?'#':'.');
         } else {
-          snprintf(bat, sizeof(bat), "[----] --.--V");
+          snprintf(bat_top, sizeof(bat_top), "[....]");
         }
-        it.print(12, 226, id(font_caption), fg, TextAlign::TOP_LEFT, bat);
+        it.print(w - 16, 6, id(font_caption), fg, TextAlign::TOP_RIGHT, bat_top);
+        it.line(16, 22, w - 16, 22, fg);
 
-        // Hints
-        it.print(w - 12, 226, id(font_caption), fg, TextAlign::TOP_RIGHT, "B=Nxt K=Done");
-
-        // Mode hint (bottom)
-        it.print(w / 2, 258, id(font_body), fg, TextAlign::CENTER, "BOOT long=WORK mode");
-      } else {
-        // WORK MODE
-        it.print(12, 4, id(font_caption), fg, TextAlign::TOP_LEFT, "WORK");
-        it.print(w - 12, 4, id(font_caption), fg, TextAlign::TOP_RIGHT, "[v]");
-        it.line(12, 22, w - 12, 22, fg);
-
+        // --- 状态大字 y:30-90 ---
         const char* status_text = "IDLE";
         if (st == 1) status_text = "GENERATE";
-        if (st == 2) status_text = "BUILD";
+        if (st == 2) status_text = "BUILDING";
         if (st == 3) status_text = "SUCCESS";
         if (st == 4) status_text = "FAILED";
+        it.print(w / 2, 30, id(font_display), fg, TextAlign::TOP_CENTER, status_text);
 
-        it.print(w / 2, 40, id(font_display), fg, TextAlign::CENTER, status_text);
-
+        // --- 计时/描述 y:95-120 ---
         char dur[48];
         if (st == 1 || st == 2) {
-          snprintf(dur, sizeof(dur), "elapsed: %ds", (int)id(g_work_duration));
+          snprintf(dur, sizeof(dur), "elapsed %ds", (int)id(g_work_duration));
         } else if (st == 3 || st == 4) {
-          snprintf(dur, sizeof(dur), "completed in %ds", (int)id(g_work_duration));
+          snprintf(dur, sizeof(dur), "finished in %ds", (int)id(g_work_duration));
         } else {
-          snprintf(dur, sizeof(dur), "ready to build");
+          snprintf(dur, sizeof(dur), "ready");
         }
-        it.print(w / 2, 100, id(font_headline), fg, TextAlign::CENTER, dur);
+        it.print(w / 2, 98, id(font_body), fg, TextAlign::TOP_CENTER, dur);
 
-        it.line(80, 128, w - 80, 128, fg);
+        // --- 进度条 (BUILD/GENERATE 时显示) y:125-145 ---
+        if (st == 1 || st == 2) {
+          int bar_x = 60;
+          int bar_w = w - 120;
+          int bar_y = 128;
+          int bar_h = 12;
 
+          // 外框
+          it.rectangle(bar_x, bar_y, bar_w, bar_h, fg);
+
+          // 填充进度 (模拟根据时间递增)
+          int progress = (id(g_work_duration) * 5) % 100;
+          if (progress < 5) progress = 5;
+          if (progress > 95) progress = 95;
+          int fill_w = (bar_w - 4) * progress / 100;
+          it.filled_rectangle(bar_x + 2, bar_y + 2, fill_w, bar_h - 4, fg);
+
+          // 百分比
+          char pct[8];
+          snprintf(pct, sizeof(pct), "%d%%", progress);
+          it.print(w / 2, bar_y + bar_h + 2, id(font_caption), fg, TextAlign::TOP_CENTER, pct);
+        } else if (st == 3) {
+          // SUCCESS - 显示对勾
+          it.print(w / 2, 130, id(font_display), fg, TextAlign::TOP_CENTER, "OK");
+        } else if (st == 4) {
+          // FAILED - 显示X
+          it.print(w / 2, 130, id(font_display), fg, TextAlign::TOP_CENTER, "!!");
+        }
+
+        // 分隔线
+        it.line(16, 160, w - 16, 160, fg);
+
+        // --- 项目信息 y:165-200 ---
         char proj[64];
         snprintf(proj, sizeof(proj), "%s", id(g_project).c_str());
-        it.print(w / 2, 140, id(font_body), fg, TextAlign::CENTER, proj);
+        it.print(w / 2, 166, id(font_body), fg, TextAlign::TOP_CENTER, proj);
 
         char branch[32];
-        snprintf(branch, sizeof(branch), "branch: %s", id(g_branch).c_str());
-        it.print(w / 2, 162, id(font_caption), fg, TextAlign::CENTER, branch);
+        snprintf(branch, sizeof(branch), "[%s]", id(g_branch).c_str());
+        it.print(w / 2, 186, id(font_caption), fg, TextAlign::TOP_CENTER, branch);
 
-        it.line(12, 188, w - 12, 188, fg);
-
+        // --- 状态机提示 y:205-235 ---
+        it.line(16, 210, w - 16, 210, fg);
         if (st == 0) {
-          it.print(w / 2, 208, id(font_body), fg, TextAlign::CENTER, "K long = Start Build");
+          it.print(w / 2, 216, id(font_body), fg, TextAlign::TOP_CENTER, "KEY long > START build");
+        } else if (st == 3) {
+          it.print(w / 2, 216, id(font_body), fg, TextAlign::TOP_CENTER, "KEY > Continue");
         } else if (st == 4) {
-          it.print(w / 2, 208, id(font_body), fg, TextAlign::CENTER, "K = Acknowledge");
+          it.print(w / 2, 216, id(font_body), fg, TextAlign::TOP_CENTER, "KEY > Retry");
         } else {
-          it.print(w / 2, 208, id(font_body), fg, TextAlign::CENTER, "K = Cancel");
+          it.print(w / 2, 216, id(font_body), fg, TextAlign::TOP_CENTER, "KEY > Cancel");
         }
 
-        it.line(12, 240, w - 12, 240, fg);
-
-        char bat[20];
+        // --- 底部状态栏 y:245-300 ---
+        it.line(16, 248, w - 16, 248, fg);
+        char bat_bottom[24];
         if (id(bat_voltage).has_state()) {
-          snprintf(bat, sizeof(bat), "%.2fV", id(bat_voltage).state);
+          snprintf(bat_bottom, sizeof(bat_bottom), "%.2fV", id(bat_voltage).state);
         } else {
-          snprintf(bat, sizeof(bat), "--.--V");
+          snprintf(bat_bottom, sizeof(bat_bottom), "--.--V");
         }
-        it.print(12, 246, id(font_caption), fg, TextAlign::TOP_LEFT, bat);
-
-        it.print(w - 12, 246, id(font_caption), fg, TextAlign::TOP_RIGHT, "BOOT=LIFE mode");
+        it.print(16, 262, id(font_caption), fg, TextAlign::TOP_LEFT, bat_bottom);
+        it.print(w - 16, 262, id(font_caption), fg, TextAlign::TOP_RIGHT, "BOOT=Status");
+        it.print(w / 2, 282, id(font_caption), fg, TextAlign::TOP_CENTER, "BOOT long > LIFE mode");
       }
 
 binary_sensor:

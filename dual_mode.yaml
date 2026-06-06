@@ -165,100 +165,89 @@ display:
       
       it.fill(bg);
       
-      // ========== 生活模式 (LIFE) ==========
+      // ========== 生活模式 (LIFE) - 卡片式布局 ==========
       if (mode == 0) {
         auto now = id(my_time).now();
         
-        // --- 顶部标题栏 (y: 8-28) ---
-        it.print(16, 8, id(font_caption), fg, TextAlign::TOP_LEFT, "LIFE");
+        // --- 顶部状态栏 (y: 4-22) ---
+        it.print(12, 4, id(font_caption), fg, TextAlign::TOP_LEFT, "LIFE");
         
-        // 待办计数
-        uint8_t done = ((id(g_todo_state)&1) + ((id(g_todo_state)>>1)&1) + ((id(g_todo_state)>>2)&1));
-        uint8_t pending = 3 - done;
-        char cnt[16];
-        snprintf(cnt, sizeof(cnt), "%d/3", pending);
-        it.print(384, 8, id(font_caption), fg, TextAlign::TOP_RIGHT, cnt);
+        // WiFi/蓝牙状态图标 (右上角)
+        // WiFi 状态通过全局状态检查
+        it.print(388, 4, id(font_caption), fg, TextAlign::TOP_RIGHT, "[W]");
         
         // 分隔线
-        it.line(16, 28, 384, 28, fg);
+        it.line(12, 22, 388, 22, fg);
         
-        // --- 时间区域 (y: 40-110) ---
+        // --- 时间卡片 (y: 26-85) ---
         if (now.is_valid()) {
           char buf[16];
           snprintf(buf, sizeof(buf), "%02d:%02d", now.hour, now.minute);
-          it.print(200, 55, id(font_display), fg, TextAlign::CENTER, buf);
+          it.print(200, 32, id(font_display), fg, TextAlign::CENTER, buf);
+          
+          // 日期 + 星期
+          char date_buf[32];
+          const char* wd[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+          snprintf(date_buf, sizeof(date_buf), "%d/%d %s", now.month, now.day_of_month, wd[now.day_of_week]);
+          it.print(200, 68, id(font_body), fg, TextAlign::CENTER, date_buf);
         } else {
-          it.print(200, 55, id(font_display), fg, TextAlign::CENTER, "--:--");
+          it.print(200, 32, id(font_display), fg, TextAlign::CENTER, "--:--");
+          it.print(200, 68, id(font_body), fg, TextAlign::CENTER, "syncing...");
         }
         
-        // 日期
-        if (now.is_valid()) {
-          char buf[32];
-          const char* weekdays[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
-          snprintf(buf, sizeof(buf), "%04d-%02d-%02d %s", 
-                   now.year, now.month, now.day_of_month, 
-                   weekdays[now.day_of_week]);
-          it.print(200, 112, id(font_headline), fg, TextAlign::CENTER, buf);
-        }
-        
-        // 分隔线
-        it.line(80, 138, 320, 138, fg);
-        
-        // --- 环境信息区域 (y: 145-175) ---
+        // --- 环境卡片 (y: 90-118) ---
         char env[48];
         if (id(temp_sensor).has_state() && id(hum_sensor).has_state()) {
-          snprintf(env, sizeof(env), "%.1f°C  |  %.0f%%RH", 
-                   id(temp_sensor).state, id(hum_sensor).state);
+          snprintf(env, sizeof(env), "%.1fC  %.0f%%", id(temp_sensor).state, id(hum_sensor).state);
         } else {
-          snprintf(env, sizeof(env), "--.-°C  |  --%%RH");
+          snprintf(env, sizeof(env), "--.-C  --%%");
         }
-        it.print(200, 152, id(font_body), fg, TextAlign::CENTER, env);
+        it.print(200, 96, id(font_body), fg, TextAlign::CENTER, env);
         
         // 分隔线
-        it.line(16, 175, 384, 175, fg);
+        it.line(12, 122, 388, 122, fg);
         
-        // --- 待办列表区域 (y: 182-265) ---
+        // --- 待办卡片 (y: 126-268) ---
+        it.print(12, 128, id(font_caption), fg, TextAlign::TOP_LEFT, "TODO");
+        
         const char* todos[3] = {"Buy milk", "Review PR", "Submit weekly"};
-        int todo_y = 188;
+        int todo_y = 148;
         uint8_t sel = id(g_todo_idx);
         uint8_t done_mask = id(g_todo_state);
         
         for (int i = 0; i < 3; i++) {
           bool is_done = (done_mask >> i) & 1;
           char line[48];
-          snprintf(line, sizeof(line), "%s %s", 
-                   is_done ? "✓" : "○", todos[i]);
+          snprintf(line, sizeof(line), "%c %s", is_done ? 'x' : 'o', todos[i]);
           
-          // 选中项高亮
           if (i == sel) {
-            it.filled_rectangle(20, todo_y - 2, 360, 22, fg);
-            it.print(32, todo_y, id(font_body), bg, TextAlign::TOP_LEFT, line);
+            it.filled_rectangle(16, todo_y - 2, 368, 20, fg);
+            it.print(24, todo_y, id(font_body), bg, TextAlign::TOP_LEFT, line);
           } else {
-            // 已完成项灰度效果（用浅色显示）
-            it.print(32, todo_y, id(font_body), fg, TextAlign::TOP_LEFT, line);
+            it.print(24, todo_y, id(font_body), fg, TextAlign::TOP_LEFT, line);
           }
-          todo_y += 24;
+          todo_y += 22;
         }
         
-        // 分隔线
-        it.line(16, 268, 384, 268, fg);
+        // --- 底部状态栏 (y: 272-295) ---
+        it.line(12, 272, 388, 272, fg);
         
-        // --- 底部状态栏 (y: 275-295) ---
-        char bat[16];
+        // 电池电量
+        char bat[20];
         if (id(bat_voltage).has_state()) {
           float v = id(bat_voltage).state;
-          // 电池图标指示
-          const char* bat_icon = (v > 4.0) ? "████" : 
-                                 (v > 3.7) ? "███ " : 
-                                 (v > 3.4) ? "██  " : "█   ";
-          snprintf(bat, sizeof(bat), "%s %.2fV", bat_icon, v);
+          int bars = (v > 4.0) ? 4 : (v > 3.7) ? 3 : (v > 3.4) ? 2 : 1;
+          char bar_str[5];
+          for (int i = 0; i < 4; i++) bar_str[i] = (i < bars) ? '|' : ' ';
+          bar_str[4] = '\0';
+          snprintf(bat, sizeof(bat), "[%s]%.2fV", bar_str, v);
         } else {
-          snprintf(bat, sizeof(bat), "---- --.--V");
+          snprintf(bat, sizeof(bat), "[----]--.--V");
         }
-        it.print(16, 278, id(font_caption), fg, TextAlign::TOP_LEFT, bat);
+        it.print(12, 280, id(font_caption), fg, TextAlign::TOP_LEFT, bat);
         
         // 操作提示
-        it.print(384, 278, id(font_caption), fg, TextAlign::TOP_RIGHT, "B=Next K=Done");
+        it.print(388, 280, id(font_caption), fg, TextAlign::TOP_RIGHT, "B>Nxt K=Done");
         
       // ========== 工作模式 (WORK) ==========
       } else {

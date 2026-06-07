@@ -59,8 +59,11 @@ external_components:
     refresh: 0s
 
 time:
-  - platform: pcf85063
+  - platform: sntp
     id: my_time
+    timezone: "Asia/Shanghai"
+  - platform: pcf85063
+    id: pcf_time
     update_interval: 60s
 
 sensor:
@@ -165,16 +168,17 @@ display:
 
         // --- 顶部状态栏 y:0-22 ---
         it.print(16, 6, id(font_caption), fg, TextAlign::TOP_LEFT, "LIFE");
-        // 电池图标
-        char bat_top[16];
+        // 电池 (百分比 + 电压)
+        char bat_top[32];
         if (id(bat_voltage).has_state()) {
           float v = id(bat_voltage).state;
-          int bars = (v > 4.0) ? 4 : (v > 3.7) ? 3 : (v > 3.4) ? 2 : 1;
-          snprintf(bat_top, sizeof(bat_top), "[%c%c%c%c]",
-            (bars>=1)?'#':'.', (bars>=2)?'#':'.',
-            (bars>=3)?'#':'.', (bars>=4)?'#':'.');
+          // 3.0V=0% ~ 4.2V=100%
+          int pct = (int)((v - 3.0f) * 100.0f / 1.2f);
+          if (pct < 0) pct = 0;
+          if (pct > 100) pct = 100;
+          snprintf(bat_top, sizeof(bat_top), "BAT %d%%  %.2fV", pct, v);
         } else {
-          snprintf(bat_top, sizeof(bat_top), "[....]");
+          snprintf(bat_top, sizeof(bat_top), "BAT --%%  --.--V");
         }
         it.print(w - 16, 6, id(font_caption), fg, TextAlign::TOP_RIGHT, bat_top);
         // 分隔线
@@ -192,9 +196,13 @@ display:
         // --- 日期 y:96-118 ---
         if (now.is_valid()) {
           char date_buf[32];
+          // day_of_week: 1=Sun, 2=Mon, ... 7=Sat
           const char* wd[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+          int wd_idx = now.day_of_week - 1;
+          if (wd_idx < 0) wd_idx = 0;
+          if (wd_idx > 6) wd_idx = 6;
           snprintf(date_buf, sizeof(date_buf), "%04d-%02d-%02d  %s",
-                   now.year, now.month, now.day_of_month, wd[now.day_of_week]);
+                   now.year, now.month, now.day_of_month, wd[wd_idx]);
           it.print(w / 2, 96, id(font_body), fg, TextAlign::TOP_CENTER, date_buf);
         } else {
           it.print(w / 2, 96, id(font_body), fg, TextAlign::TOP_CENTER, "syncing time...");
@@ -225,9 +233,9 @@ display:
           char line[48];
 
           if (i == sel) {
-            // 选中项 - 反白背景
+            // 选中项 - 反白背景，保持完成状态
             it.filled_rectangle(16, task_y - 2, w - 32, 18, fg);
-            snprintf(line, sizeof(line), "[X] %s", tasks[i]);
+            snprintf(line, sizeof(line), "[%c] %s", is_done ? 'X' : ' ', tasks[i]);
             it.print(24, task_y, id(font_body), bg, TextAlign::TOP_LEFT, line);
           } else {
             // 非选中项
@@ -240,35 +248,30 @@ display:
         // --- 底部状态栏 y:245-300 ---
         it.line(16, 248, w - 16, 248, fg);
 
-        // 电池电压 (左下)
-        char bat_bottom[24];
-        if (id(bat_voltage).has_state()) {
-          snprintf(bat_bottom, sizeof(bat_bottom), "%.2fV", id(bat_voltage).state);
-        } else {
-          snprintf(bat_bottom, sizeof(bat_bottom), "--.--V");
-        }
-        it.print(16, 262, id(font_caption), fg, TextAlign::TOP_LEFT, bat_bottom);
+        // 第一行: 左下状态, 右下按键说明
+        it.print(16, 262, id(font_caption), fg, TextAlign::TOP_LEFT,
+                 id(temp_sensor).has_state() ? "SENSOR OK" : "SENSOR --");
+        it.print(w - 16, 262, id(font_caption), fg, TextAlign::TOP_RIGHT,
+                 "BOOT: Mode    KEY: Select");
 
-        // 操作提示 (右下)
-        it.print(w - 16, 262, id(font_caption), fg, TextAlign::TOP_RIGHT, "BOOT=Next KEY=Done");
-
-        // 模式切换提示 (底部)
-        it.print(w / 2, 282, id(font_caption), fg, TextAlign::TOP_CENTER, "BOOT long > WORK mode");
+        // 第二行: 右下长按提示
+        it.print(w - 16, 282, id(font_caption), fg, TextAlign::TOP_RIGHT,
+                 "Long BOOT > WORK mode");
 
       // ============ WORK 模式 ============
       } else {
         // --- 顶部状态栏 ---
         it.print(16, 6, id(font_caption), fg, TextAlign::TOP_LEFT, ">> CODE <<");
 
-        char bat_top[16];
+        char bat_top[32];
         if (id(bat_voltage).has_state()) {
           float v = id(bat_voltage).state;
-          int bars = (v > 4.0) ? 4 : (v > 3.7) ? 3 : (v > 3.4) ? 2 : 1;
-          snprintf(bat_top, sizeof(bat_top), "[%c%c%c%c]",
-            (bars>=1)?'#':'.', (bars>=2)?'#':'.',
-            (bars>=3)?'#':'.', (bars>=4)?'#':'.');
+          int pct = (int)((v - 3.0f) * 100.0f / 1.2f);
+          if (pct < 0) pct = 0;
+          if (pct > 100) pct = 100;
+          snprintf(bat_top, sizeof(bat_top), "BAT %d%%  %.2fV", pct, v);
         } else {
-          snprintf(bat_top, sizeof(bat_top), "[....]");
+          snprintf(bat_top, sizeof(bat_top), "BAT --%%  --.--V");
         }
         it.print(w - 16, 6, id(font_caption), fg, TextAlign::TOP_RIGHT, bat_top);
         it.line(16, 22, w - 16, 22, fg);
@@ -347,15 +350,11 @@ display:
 
         // --- 底部状态栏 y:245-300 ---
         it.line(16, 248, w - 16, 248, fg);
-        char bat_bottom[24];
-        if (id(bat_voltage).has_state()) {
-          snprintf(bat_bottom, sizeof(bat_bottom), "%.2fV", id(bat_voltage).state);
-        } else {
-          snprintf(bat_bottom, sizeof(bat_bottom), "--.--V");
-        }
-        it.print(16, 262, id(font_caption), fg, TextAlign::TOP_LEFT, bat_bottom);
-        it.print(w - 16, 262, id(font_caption), fg, TextAlign::TOP_RIGHT, "BOOT=Status");
-        it.print(w / 2, 282, id(font_caption), fg, TextAlign::TOP_CENTER, "BOOT long > LIFE mode");
+        it.print(16, 262, id(font_caption), fg, TextAlign::TOP_LEFT, "SENSOR OK");
+        it.print(w - 16, 262, id(font_caption), fg, TextAlign::TOP_RIGHT,
+                 "BOOT: Mode    KEY: Action");
+        it.print(w - 16, 282, id(font_caption), fg, TextAlign::TOP_RIGHT,
+                 "Long BOOT > LIFE mode");
       }
 
 binary_sensor:

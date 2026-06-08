@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RLCD MONOCHROME SIMULATOR</title>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-color: #ffffff;
+  --fg-color: #000000;
+  --border-width: 2px;
+  --scanline-height: 4px;
+  --scanline-gap: 3px;
+  --scanline-opacity: 0.3;
+  --grid-size: 20px;
+  --time-size: 52px;
+  --time-margin: 20px;
+  --date-size: 16px;
+  --label-size: 12px;
+  --data-size: 24px;
+  --todo-size: 16px;
+  --footer-size: 12px;
+  --divider-height: 2px;
+  --panel-divider: 50;
+  --data-grid-gap: 20;
+  --todo-item-height: 20;
+  --header-height: 32;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #333333;
+  font-family: 'JetBrains Mono', monospace;
+  padding: 20px;
+  color: #ffffff;
+}
+
+.container {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.screen-wrapper {
+  position: relative;
+}
+
+.screen {
+  width: 400px;
+  height: 300px;
+  background: var(--bg-color);
+  border: var(--border-width) solid var(--fg-color);
+  overflow: hidden;
+  position: relative;
+}
+
+.screen::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent var(--scanline-gap),
+    rgba(0, 0, 0, var(--scanline-opacity)) var(--scanline-gap),
+    rgba(0, 0, 0, var(--scanline-opacity)) var(--scanline-height)
+  );
+  pointer-events: none;
+  z-index: 100;
+}
+
+.screen-inner {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
+  border: 1px solid var(--fg-color);
+  pointer-events: none;
+}
+
+.grid-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px);
+  background-size: var(--grid-size) var(--grid-size);
+  pointer-events: none;
+}
+
+.content {
+  padding: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.title-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: calc(var(--header-height) * 1px);
+}
+
+.title-left {
+  font-family: 'VT323', monospace;
+  font-size: calc(var(--header-height) * 0.9px);
+  color: var(--fg-color);
+}
+
+.title-right {
+  font-size: calc(var(--label-size) * 0.8px);
+  color: var(--fg-color);
+  opacity: 0.7;
+}
+
+.main-section {
+  display: flex;
+  height: calc(100% - var(--header-height) * 1px - var(--footer-size) * 2px - 32px);
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.left-panel {
+  width: calc(var(--panel-divider) * 1%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: calc(var(--time-margin) * 1px);
+}
+
+.right-panel {
+  width: calc((100 - var(--panel-divider)) * 1%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: calc(var(--time-margin) * 1px);
+}
+
+.time-display {
+  font-family: 'VT323', monospace;
+  font-size: var(--time-size);
+  color: var(--fg-color);
+  line-height: 1.1;
+}
+
+.date-display {
+  font-size: var(--date-size);
+  color: var(--fg-color);
+  opacity: 0.7;
+  margin-top: 4px;
+}
+
+.weather-icon {
+  font-family: 'VT323', monospace;
+  font-size: calc(var(--time-size) * 0.7);
+  color: var(--fg-color);
+}
+
+.weather-temp {
+  font-family: 'VT323', monospace;
+  font-size: var(--data-size);
+  color: var(--fg-color);
+}
+
+.weather-desc {
+  font-size: var(--label-size);
+  color: var(--fg-color);
+  opacity: 0.7;
+  text-align: center;
+}
+
+.divider-vertical {
+  width: var(--divider-height);
+  background: var(--fg-color);
+}
+
+.divider-horizontal {
+  height: var(--divider-height);
+  background: var(--fg-color);
+  margin: 6px 0;
+}
+
+.data-grid {
+  display: flex;
+  justify-content: space-around;
+  width: 100%;
+  margin-top: 4px;
+  gap: calc(var(--data-grid-gap) * 1px);
+}
+
+.data-item {
+  text-align: center;
+  flex: 1;
+}
+
+.data-label {
+  font-size: var(--label-size);
+  color: var(--fg-color);
+  opacity: 0.5;
+}
+
+.data-value {
+  font-family: 'VT323', monospace;
+  font-size: var(--data-size);
+  color: var(--fg-color);
+}
+
+.todo-section {
+  margin-top: 4px;
+  width: 100%;
+}
+
+.todo-title {
+  font-size: var(--label-size);
+  color: var(--fg-color);
+  opacity: 0.5;
+  margin-bottom: 2px;
+}
+
+.todo-item {
+  font-size: var(--todo-size);
+  color: var(--fg-color);
+  height: calc(var(--todo-item-height) * 1px);
+  line-height: calc(var(--todo-item-height) * 1px);
+  padding: 0 2px;
+}
+
+.todo-item.selected {
+  background: var(--fg-color);
+  color: var(--bg-color);
+  padding: 0 4px;
+  margin: 0 -4px;
+}
+
+.footer {
+  position: absolute;
+  bottom: 4px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: var(--footer-size);
+  color: var(--fg-color);
+  opacity: 0.5;
+}
+
+.params-panel {
+  width: 360px;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: #000000;
+  border: 2px solid #ffffff;
+  padding: 15px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #ffffff;
+}
+
+.params-panel h3 {
+  font-size: 14px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #ffffff;
+  padding-bottom: 6px;
+  color: #ffffff;
+}
+
+.params-panel h4 {
+  font-size: 12px;
+  margin: 10px 0 6px;
+  color: #aaaaaa;
+}
+
+.param-item {
+  margin: 5px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.param-label {
+  width: 120px;
+  color: #888888;
+  flex-shrink: 0;
+}
+
+.param-item input[type="range"] {
+  width: 100px;
+  cursor: pointer;
+}
+
+.param-item input[type="text"] {
+  width: 60px;
+  background: #111;
+  border: 1px solid #444;
+  color: #fff;
+  padding: 2px 4px;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.param-item select {
+  width: 70px;
+  background: #111;
+  border: 1px solid #444;
+  color: #fff;
+  padding: 2px 4px;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.param-value {
+  width: 50px;
+  color: #00ff00;
+  font-size: 10px;
+}
+
+.btn {
+  background: #000000;
+  border: 1px solid #ffffff;
+  color: #ffffff;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+  margin: 2px;
+}
+
+.btn:hover { background: #ffffff; color: #000000; }
+.btn.active { background: #ffffff; color: #000000; }
+
+.screenshot-btn {
+  background: #ffffff;
+  border: none;
+  color: #000000;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  padding: 10px 20px;
+  cursor: pointer;
+  margin-top: 15px;
+  width: 100%;
+}
+
+.screen-container {
+  display: flex;
+  flex-direction: column;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="screen-container">
+    <div class="buttons" style="margin-bottom:10px;">
+      <button class="btn active" onclick="switchMode('LIFE')">LIFE</button>
+      <button class="btn" onclick="switchMode('WORK')">WORK</button>
+    </div>
+    
+    <div class="screen-wrapper">
+      <div class="screen" id="screen">
+        <div class="grid-bg" id="gridBg"></div>
+        <div class="screen-inner" id="innerBorder"></div>
+        <div class="content" id="content"></div>
+      </div>
+    </div>
+    
+    <button class="screenshot-btn" onclick="screenshot()">[ CAPTURE ]</button>
+  </div>
+
+  <div class="params-panel">
+    <h3>// MONOCHROME SIMULATOR</h3>
+    
+    <h4>DISPLAY</h4>
+    <div class="param-item"><span class="param-label">Background</span><select id="bgMode" onchange="updateParams()"><option value="white">White</option><option value="black">Black</option></select></div>
+    <div class="param-item"><span class="param-label">Contrast</span><input type="range" id="contrast" min="50" max="100" value="100" onchange="updateParams()"><span class="param-value" id="contrastVal">100%</span></div>
+    
+    <h4>LAYOUT</h4>
+    <div class="param-item"><span class="param-label">Left Panel %</span><input type="range" id="panelDivider" min="30" max="70" value="50" onchange="updateParams()"><span class="param-value" id="panelDividerVal">50%</span></div>
+    <div class="param-item"><span class="param-label">Header Height</span><input type="range" id="headerHeight" min="20" max="50" value="32" onchange="updateParams()"><span class="param-value" id="headerHeightVal">32px</span></div>
+    <div class="param-item"><span class="param-label">Data Grid Gap</span><input type="range" id="dataGridGap" min="0" max="40" value="20" onchange="updateParams()"><span class="param-value" id="dataGridGapVal">20px</span></div>
+    <div class="param-item"><span class="param-label">Todo Item H</span><input type="range" id="todoItemHeight" min="14" max="30" value="20" onchange="updateParams()"><span class="param-value" id="todoItemHeightVal">20px</span></div>
+    
+    <h4>TYPOGRAPHY</h4>
+    <div class="param-item"><span class="param-label">Time Size</span><input type="range" id="timeSize" min="24" max="72" value="52" onchange="updateParams()"><span class="param-value" id="timeSizeVal">52px</span></div>
+    <div class="param-item"><span class="param-label">Time Margin</span><input type="range" id="timeMargin" min="0" max="40" value="20" onchange="updateParams()"><span class="param-value" id="timeMarginVal">20px</span></div>
+    <div class="param-item"><span class="param-label">Date Size</span><input type="range" id="dateSize" min="10" max="24" value="16" onchange="updateParams()"><span class="param-value" id="dateSizeVal">16px</span></div>
+    <div class="param-item"><span class="param-label">Data Size</span><input type="range" id="dataSize" min="14" max="32" value="24" onchange="updateParams()"><span class="param-value" id="dataSizeVal">24px</span></div>
+    <div class="param-item"><span class="param-label">Label Size</span><input type="range" id="labelSize" min="8" max="18" value="12" onchange="updateParams()"><span class="param-value" id="labelSizeVal">12px</span></div>
+    <div class="param-item"><span class="param-label">Todo Size</span><input type="range" id="todoSize" min="10" max="22" value="16" onchange="updateParams()"><span class="param-value" id="todoSizeVal">16px</span></div>
+    <div class="param-item"><span class="param-label">Footer Size</span><input type="range" id="footerSize" min="8" max="16" value="12" onchange="updateParams()"><span class="param-value" id="footerSizeVal">12px</span></div>
+    <div class="param-item"><span class="param-label">Font</span><select id="fontFamily" onchange="updateParams()"><option value="vt323">VT323</option><option value="mono">JetBrains Mono</option></select></div>
+    
+    <h4>BORDER</h4>
+    <div class="param-item"><span class="param-label">Border Width</span><input type="range" id="borderWidth" min="0" max="8" value="2" onchange="updateParams()"><span class="param-value" id="borderWidthVal">2px</span></div>
+    <div class="param-item"><span class="param-label">Divider Height</span><input type="range" id="dividerHeight" min="1" max="6" value="2" onchange="updateParams()"><span class="param-value" id="dividerHeightVal">2px</span></div>
+    <div class="param-item"><span class="param-label">Inner Border</span><input type="checkbox" id="innerBorderOn" checked onchange="updateParams()"></div>
+    
+    <h4>EFFECTS</h4>
+    <div class="param-item"><span class="param-label">Scanlines</span><input type="checkbox" id="scanlineOn" checked onchange="updateParams()"></div>
+    <div class="param-item"><span class="param-label">Scanline Opacity</span><input type="range" id="scanlineOpacity" min="0" max="100" value="30" onchange="updateParams()"><span class="param-value" id="scanlineOpacityVal">30%</span></div>
+    <div class="param-item"><span class="param-label">Grid</span><input type="checkbox" id="gridOn" checked onchange="updateParams()"></div>
+    <div class="param-item"><span class="param-label">Grid Size</span><input type="range" id="gridSize" min="8" max="30" value="20" onchange="updateParams()"><span class="param-value" id="gridSizeVal">20px</span></div>
+    
+    <h4>DATA</h4>
+    <div class="param-item"><span class="param-label">Time</span><input type="text" id="simTime" value="19:42" onchange="render()"></div>
+    <div class="param-item"><span class="param-label">Date</span><input type="text" id="simDate" value="2026.Jun.07 SUN" onchange="render()"></div>
+    <div class="param-item"><span class="param-label">Indoor Temp</span><input type="text" id="simTemp" value="26.3"><span>°C</span></div>
+    <div class="param-item"><span class="param-label">Humidity</span><input type="text" id="simHum" value="58"><span>%</span></div>
+    <div class="param-item"><span class="param-label">Battery</span><input type="text" id="simBat" value="78"><span>%</span></div>
+    <div class="param-item"><span class="param-label">Outdoor Temp</span><input type="text" id="simOutTemp" value="25"><span>°C</span></div>
+    <div class="param-item"><span class="param-label">Weather</span><input type="text" id="simWeatherDesc" value="Clear sky" onchange="render()"></div>
+    
+    <h4>PRESETS</h4>
+    <div style="margin-top:8px;">
+      <button class="btn" onclick="loadPreset('classic')">CLASSIC</button>
+      <button class="btn" onclick="loadPreset('compact')">COMPACT</button>
+      <button class="btn" onclick="loadPreset('large')">LARGE</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentMode = 'LIFE';
+
+const presets = {
+  classic: { bgMode: 'white', contrast: 100, panelDivider: 50, headerHeight: 32, dataGridGap: 20, todoItemHeight: 20, timeSize: 52, timeMargin: 20, dateSize: 16, dataSize: 24, labelSize: 12, todoSize: 16, footerSize: 12, borderWidth: 2, dividerHeight: 2, scanlineOn: true, scanlineOpacity: 30, gridOn: true, gridSize: 20 },
+  compact: { bgMode: 'white', contrast: 100, panelDivider: 50, headerHeight: 24, dataGridGap: 10, todoItemHeight: 16, timeSize: 40, timeMargin: 12, dateSize: 12, dataSize: 18, labelSize: 10, todoSize: 12, footerSize: 10, borderWidth: 1, dividerHeight: 1, scanlineOn: false, gridOn: false, gridSize: 20 },
+  large: { bgMode: 'white', contrast: 100, panelDivider: 55, headerHeight: 40, dataGridGap: 30, todoItemHeight: 24, timeSize: 64, timeMargin: 25, dateSize: 20, dataSize: 30, labelSize: 14, todoSize: 18, footerSize: 14, borderWidth: 3, dividerHeight: 2, scanlineOn: true, scanlineOpacity: 40, gridOn: true, gridSize: 25 }
+};
+
+function switchMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.buttons .btn').forEach((b, i) => b.classList.toggle('active', mode === (i === 0 ? 'LIFE' : 'WORK')));
+  render();
+}
+
+function updateParams() {
+  const root = document.documentElement;
+  const screen = document.getElementById('screen');
+  
+  const bgMode = document.getElementById('bgMode').value;
+  root.style.setProperty('--bg-color', bgMode === 'white' ? '#ffffff' : '#000000');
+  root.style.setProperty('--fg-color', bgMode === 'white' ? '#000000' : '#ffffff');
+  
+  const contrast = document.getElementById('contrast').value;
+  screen.style.filter = `contrast(${contrast}%)`;
+  document.getElementById('contrastVal').textContent = contrast + '%';
+  
+  root.style.setProperty('--panel-divider', document.getElementById('panelDivider').value);
+  document.getElementById('panelDividerVal').textContent = document.getElementById('panelDivider').value + '%';
+  
+  root.style.setProperty('--header-height', document.getElementById('headerHeight').value);
+  document.getElementById('headerHeightVal').textContent = document.getElementById('headerHeight').value + 'px';
+  
+  root.style.setProperty('--data-grid-gap', document.getElementById('dataGridGap').value);
+  document.getElementById('dataGridGapVal').textContent = document.getElementById('dataGridGap').value + 'px';
+  
+  root.style.setProperty('--todo-item-height', document.getElementById('todoItemHeight').value);
+  document.getElementById('todoItemHeightVal').textContent = document.getElementById('todoItemHeight').value + 'px';
+  
+  root.style.setProperty('--time-size', document.getElementById('timeSize').value + 'px');
+  root.style.setProperty('--time-margin', document.getElementById('timeMargin').value);
+  root.style.setProperty('--date-size', document.getElementById('dateSize').value + 'px');
+  root.style.setProperty('--data-size', document.getElementById('dataSize').value + 'px');
+  root.style.setProperty('--label-size', document.getElementById('labelSize').value + 'px');
+  root.style.setProperty('--todo-size', document.getElementById('todoSize').value + 'px');
+  root.style.setProperty('--footer-size', document.getElementById('footerSize').value + 'px');
+  
+  document.getElementById('timeSizeVal').textContent = document.getElementById('timeSize').value + 'px';
+  document.getElementById('timeMarginVal').textContent = document.getElementById('timeMargin').value + 'px';
+  document.getElementById('dateSizeVal').textContent = document.getElementById('dateSize').value + 'px';
+  document.getElementById('dataSizeVal').textContent = document.getElementById('dataSize').value + 'px';
+  document.getElementById('labelSizeVal').textContent = document.getElementById('labelSize').value + 'px';
+  document.getElementById('todoSizeVal').textContent = document.getElementById('todoSize').value + 'px';
+  document.getElementById('footerSizeVal').textContent = document.getElementById('footerSize').value + 'px';
+  
+  root.style.setProperty('--border-width', document.getElementById('borderWidth').value + 'px');
+  root.style.setProperty('--divider-height', document.getElementById('dividerHeight').value + 'px');
+  document.getElementById('borderWidthVal').textContent = document.getElementById('borderWidth').value + 'px';
+  document.getElementById('dividerHeightVal').textContent = document.getElementById('dividerHeight').value + 'px';
+  
+  document.getElementById('innerBorder').style.display = document.getElementById('innerBorderOn').checked ? 'block' : 'none';
+  
+  root.style.setProperty('--scanline-opacity', document.getElementById('scanlineOpacity').value / 100);
+  document.getElementById('scanlineOpacityVal').textContent = document.getElementById('scanlineOpacity').value + '%';
+  
+  document.getElementById('gridBg').style.display = document.getElementById('gridOn').checked ? 'block' : 'none';
+  root.style.setProperty('--grid-size', document.getElementById('gridSize').value + 'px');
+  document.getElementById('gridSizeVal').textContent = document.getElementById('gridSize').value + 'px';
+  
+  const font = document.getElementById('fontFamily').value;
+  document.querySelector('.content').style.fontFamily = font === 'vt323' ? "'VT323', monospace" : "'JetBrains Mono', monospace";
+  
+  render();
+}
+
+function loadPreset(name) {
+  const p = presets[name];
+  Object.keys(p).forEach(key => {
+    const el = document.getElementById(key);
+    if (el) {
+      if (el.type === 'checkbox') el.checked = p[key];
+      else el.value = p[key];
+    }
+  });
+  updateParams();
+}
+
+function render() {
+  const content = document.getElementById('content');
+  const time = document.getElementById('simTime').value;
+  const date = document.getElementById('simDate').value;
+  const temp = document.getElementById('simTemp').value;
+  const hum = document.getElementById('simHum').value;
+  const bat = document.getElementById('simBat').value;
+  const outTemp = document.getElementById('simOutTemp').value;
+  const weatherDesc = document.getElementById('simWeatherDesc').value;
+  
+  if (currentMode === 'LIFE') {
+    content.innerHTML = `
+      <div class="title-bar">
+        <div class="title-left">LIFE</div>
+        <div class="title-right">W:ON B:ON</div>
+      </div>
+      <div class="main-section">
+        <div class="left-panel">
+          <div class="time-display">${time}</div>
+          <div class="date-display">${date}</div>
+        </div>
+        <div class="divider-vertical"></div>
+        <div class="right-panel">
+          <div class="weather-icon">${outTemp > 15 ? '☀' : '❄'}</div>
+          <div class="weather-temp">${outTemp}C</div>
+          <div class="weather-desc">${weatherDesc}</div>
+        </div>
+      </div>
+      <div class="divider-horizontal"></div>
+      <div class="data-grid">
+        <div class="data-item"><div class="data-label">[IN]</div><div class="data-value">${temp}C</div></div>
+        <div class="data-item"><div class="data-label">[HUM]</div><div class="data-value">${hum}%</div></div>
+        <div class="data-item"><div class="data-label">[BAT]</div><div class="data-value">${bat}%</div></div>
+      </div>
+      <div class="divider-horizontal"></div>
+      <div class="todo-section">
+        <div class="todo-title">[TASKS]</div>
+        <div class="todo-item selected">X Buy Milk</div>
+        <div class="todo-item">  Review PR</div>
+        <div class="todo-item">  Weekly Report</div>
+      </div>
+      <div class="footer">BOOT=MODE KEY=SELECT</div>
+    `;
+  } else {
+    content.innerHTML = `
+      <div class="title-bar">
+        <div class="title-left">CODE</div>
+        <div class="title-right">BAT:${bat}%</div>
+      </div>
+      <div class="main-section">
+        <div class="left-panel">
+          <div class="time-display">IDLE</div>
+          <div class="date-display">READY</div>
+        </div>
+        <div class="divider-vertical"></div>
+        <div class="right-panel">
+          <div class="weather-icon">OK</div>
+          <div class="weather-temp">0%</div>
+          <div class="weather-desc">PROJECT READY</div>
+        </div>
+      </div>
+      <div class="divider-horizontal"></div>
+      <div style="width:100%; height:16px; border:2px solid; margin:4px 0;">
+        <div style="height:100%; width:0%; background:inherit;"></div>
+      </div>
+      <div class="divider-horizontal"></div>
+      <div style="text-align:center;">
+        <div style="opacity:0.7;">[PROJECT]</div>
+        <div>ESP32-DUALMODE</div>
+      </div>
+      <div class="footer">KEY LONG > START BUILD</div>
+    `;
+  }
+}
+
+function screenshot() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 400; canvas.height = 300;
+  const ctx = canvas.getContext('2d');
+  const root = document.documentElement;
+  
+  ctx.fillStyle = getComputedStyle(root).getPropertyValue('--bg-color');
+  ctx.fillRect(0, 0, 400, 300);
+  
+  ctx.strokeStyle = getComputedStyle(root).getPropertyValue('--fg-color');
+  ctx.lineWidth = parseInt(getComputedStyle(root).getPropertyValue('--border-width'));
+  ctx.strokeRect(0, 0, 400, 300);
+  
+  ctx.fillStyle = getComputedStyle(root).getPropertyValue('--fg-color');
+  ctx.font = '32px VT323';
+  ctx.fillText('LIFE', 8, 32);
+  ctx.font = '12px JetBrains Mono';
+  ctx.globalAlpha = 0.7;
+  ctx.fillText('W:ON B:ON', 320, 32);
+  ctx.globalAlpha = 1;
+  
+  ctx.font = '52px VT323';
+  ctx.fillText(document.getElementById('simTime').value, 20, 120);
+  ctx.font = '16px JetBrains Mono';
+  ctx.globalAlpha = 0.7;
+  ctx.fillText(document.getElementById('simDate').value, 20, 144);
+  ctx.globalAlpha = 1;
+  
+  ctx.fillRect(199, 40, 2, 200);
+  ctx.font = '40px VT323';
+  ctx.fillText(document.getElementById('simOutTemp').value > 15 ? '☀' : '❄', 240, 100);
+  ctx.font = '24px VT323';
+  ctx.fillText(document.getElementById('simOutTemp').value + 'C', 225, 130);
+  
+  ctx.fillRect(8, 180, 384, 2);
+  
+  ctx.font = '12px JetBrains Mono';
+  ctx.globalAlpha = 0.5;
+  ctx.fillText('[IN]', 35, 200);
+  ctx.fillText('[HUM]', 145, 200);
+  ctx.fillText('[BAT]', 255, 200);
+  ctx.globalAlpha = 1;
+  
+  ctx.font = '24px VT323';
+  ctx.fillText(document.getElementById('simTemp').value + 'C', 25, 225);
+  ctx.fillText(document.getElementById('simHum').value + '%', 140, 225);
+  ctx.fillText(document.getElementById('simBat').value + '%', 250, 225);
+  
+  ctx.fillRect(8, 235, 384, 2);
+  
+  ctx.font = '12px JetBrains Mono';
+  ctx.globalAlpha = 0.5;
+  ctx.fillText('[TASKS]', 8, 255);
+  ctx.globalAlpha = 1;
+  
+  const bg = getComputedStyle(root).getPropertyValue('--bg-color');
+  const fg = getComputedStyle(root).getPropertyValue('--fg-color');
+  ctx.fillStyle = fg;
+  ctx.fillRect(8, 258, 384, 16);
+  ctx.fillStyle = bg;
+  ctx.font = '16px JetBrains Mono';
+  ctx.fillText('X Buy Milk', 16, 272);
+  
+  ctx.fillStyle = fg;
+  ctx.fillText('  Review PR', 8, 292);
+  ctx.font = '12px JetBrains Mono';
+  ctx.globalAlpha = 0.5;
+  ctx.fillText('BOOT=MODE KEY=SELECT', 140, 292);
+  
+  const link = document.createElement('a');
+  link.download = 'rlcd-mono-' + Date.now() + '.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+updateParams();
+</script>
+
+</body>
+</html>

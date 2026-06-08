@@ -74,6 +74,9 @@ time:
         hours: '*'
         then:
           - script.execute: fetch_weather_script
+      - seconds: 0
+        then:
+          - component.update: my_display
   - platform: pcf85063
     id: pcf_time
     update_interval: 60s
@@ -176,23 +179,81 @@ globals:
 font:
   - file: "gfonts://VT323"
     id: font_display
-    size: 35
+    size: 40
     bpp: 1
 
   - file: "gfonts://VT323"
     id: font_body
-    size: 20
+    size: 24
     bpp: 1
 
   - file: "gfonts://VT323"
     id: font_label
-    size: 15
+    size: 18
     bpp: 1
 
   - file: "gfonts://VT323"
     id: font_footer
-    size: 10
+    size: 12
     bpp: 1
+
+image:
+  - id: ic_sun
+    file: "icons/weather-sunny.svg"
+    resize: 36x36
+    type: BINARY
+  - id: ic_cloud
+    file: "icons/cloud.svg"
+    resize: 36x36
+    type: BINARY
+  - id: ic_rain
+    file: "icons/weather-rainy.svg"
+    resize: 36x36
+    type: BINARY
+  - id: ic_snow
+    file: "icons/weather-snowy.svg"
+    resize: 36x36
+    type: BINARY
+  - id: ic_thunder
+    file: "icons/weather-lightning.svg"
+    resize: 36x36
+    type: BINARY
+  - id: ic_fog
+    file: "icons/weather-fog.svg"
+    resize: 36x36
+    type: BINARY
+  - id: ic_cloud_sun
+    file: "icons/weather-partly-cloudy.svg"
+    resize: 36x36
+    type: BINARY
+  - id: ic_night
+    file: "icons/weather-night.svg"
+    resize: 36x36
+    type: BINARY
+  - id: ic_cloudy
+    file: "icons/weather-cloudy.svg"
+    resize: 36x36
+    type: BINARY
+  - id: ic_thermometer
+    file: "icons/thermometer.svg"
+    resize: 24x24
+    type: BINARY
+  - id: ic_humidity
+    file: "icons/droplets.svg"
+    resize: 24x24
+    type: BINARY
+  - id: ic_battery
+    file: "icons/battery.svg"
+    resize: 24x24
+    type: BINARY
+  - id: ic_battery_charging
+    file: "icons/battery-charging.svg"
+    resize: 24x24
+    type: BINARY
+  - id: ic_check
+    file: "icons/check-circle.svg"
+    resize: 20x20
+    type: BINARY
 
 display:
   - platform: st7305_rlcd
@@ -202,7 +263,7 @@ display:
     dc_pin: GPIO5
     reset_pin: GPIO41
     data_rate: 1MHz
-    update_interval: 30s
+    update_interval: never
     lambda: |-
       uint8_t mode = id(g_mode);
       uint8_t st = id(g_work_status);
@@ -220,12 +281,6 @@ display:
       it.filled_rectangle(0, 0, 4, h, fg);
       it.filled_rectangle(w - 4, 0, 4, h, fg);
 
-      // === 4px 内边框（距边缘8px）===
-      it.filled_rectangle(8, 8, w - 16, 4, fg);
-      it.filled_rectangle(8, h - 12, w - 16, 4, fg);
-      it.filled_rectangle(8, 8, 4, h - 16, fg);
-      it.filled_rectangle(w - 12, 8, 4, h - 16, fg);
-
       // 角线
       it.line(4, 4, 8, 8, fg);
       it.line(w - 4, 4, w - 8, 8, fg);
@@ -237,20 +292,21 @@ display:
         auto now = id(my_time).now();
 
         // 顶部
-        it.print(12, 6, id(font_display), fg, TextAlign::TOP_LEFT, "LIFE");
         it.print(w - 12, 6, id(font_label), fg, TextAlign::TOP_RIGHT, "W:ON B:ON");
-        it.filled_rectangle(12, 28, 36, 2, fg);
         it.filled_rectangle(w - 48, 28, 36, 2, fg);
 
-        // 左栏时间
+        // 左栏时间（加粗）
         if (now.is_valid()) {
           char time_buf[16];
           snprintf(time_buf, sizeof(time_buf), "%02d:%02d", now.hour, now.minute);
           it.print(100, 36, id(font_display), fg, TextAlign::TOP_CENTER, time_buf);
+          it.print(101, 37, id(font_display), fg, TextAlign::TOP_CENTER, time_buf);
         } else {
           it.print(100, 36, id(font_display), fg, TextAlign::TOP_CENTER, "--:--");
+          it.print(101, 37, id(font_display), fg, TextAlign::TOP_CENTER, "--:--");
         }
 
+        // 日期（不加粗）
         if (now.is_valid()) {
           char date_buf[32];
           const char* wd[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
@@ -267,12 +323,29 @@ display:
         // 50% 竖线
         it.filled_rectangle(200, 32, 2, 70, fg);
 
-        // 右栏天气
-        it.print(300, 36, id(font_body), fg, TextAlign::TOP_CENTER, "*");
-        char out_temp[16];
-        snprintf(out_temp, sizeof(out_temp), "%.0fC", id(g_outdoor_temp));
-        it.print(300, 64, id(font_body), fg, TextAlign::TOP_CENTER, out_temp);
-        it.print(300, 88, id(font_label), fg, TextAlign::TOP_CENTER, id(g_weather_desc).c_str());
+        // 右栏天气 - 使用MDI图标（反色显示）
+        std::string cond = id(g_weather_condition).c_str();
+        if (cond == "Sunny" || cond == "Clear") {
+          it.image(282, 32, id(ic_sun), fg, bg);
+        } else if (cond == "Clouds") {
+          it.image(282, 32, id(ic_cloud), fg, bg);
+        } else if (cond == "Rain" || cond == "Drizzle") {
+          it.image(282, 32, id(ic_rain), fg, bg);
+        } else if (cond == "Snow") {
+          it.image(282, 32, id(ic_snow), fg, bg);
+        } else if (cond == "Thunderstorm") {
+          it.image(282, 32, id(ic_thunder), fg, bg);
+        } else if (cond == "Mist" || cond == "Fog") {
+          it.image(282, 32, id(ic_fog), fg, bg);
+        } else if (cond == "Partly cloudy") {
+          it.image(282, 32, id(ic_cloud_sun), fg, bg);
+        } else {
+          it.image(282, 32, id(ic_sun), fg, bg);
+        }
+        char weather_text[48];
+        snprintf(weather_text, sizeof(weather_text), "%.0fC %s", id(g_outdoor_temp), id(g_weather_desc).c_str());
+        // 天气信息（不加粗）
+        it.print(300, 78, id(font_label), fg, TextAlign::TOP_CENTER, weather_text);
 
         // 分隔线
         it.filled_rectangle(8, 108, w - 16, 2, fg);
@@ -280,25 +353,28 @@ display:
         // 三列数据
         int col_width = (w - 32) / 3;
 
-        it.print(16, 116, id(font_label), fg, TextAlign::TOP_LEFT, "[IN]");
+        // 室内温度 - 使用图标替代标题（不加粗）
+        it.image(16 + col_width / 2 - 12, 114, id(ic_thermometer), fg, bg);
         char indoor_temp[16];
         if (id(temp_sensor).has_state()) {
           snprintf(indoor_temp, sizeof(indoor_temp), "%.1fC", id(temp_sensor).state);
         } else {
           snprintf(indoor_temp, sizeof(indoor_temp), "--");
         }
-        it.print(16 + col_width / 2, 136, id(font_body), fg, TextAlign::TOP_CENTER, indoor_temp);
+        it.print(16 + col_width / 2, 140, id(font_body), fg, TextAlign::TOP_CENTER, indoor_temp);
 
-        it.print(16 + col_width, 116, id(font_label), fg, TextAlign::TOP_LEFT, "[HUM]");
+        // 湿度 - 使用图标替代标题（不加粗）
+        it.image(16 + col_width + col_width / 2 - 12, 114, id(ic_humidity), fg, bg);
         char indoor_hum[16];
         if (id(hum_sensor).has_state()) {
           snprintf(indoor_hum, sizeof(indoor_hum), "%.0f%%", id(hum_sensor).state);
         } else {
           snprintf(indoor_hum, sizeof(indoor_hum), "--");
         }
-        it.print(16 + col_width + col_width / 2, 136, id(font_body), fg, TextAlign::TOP_CENTER, indoor_hum);
+        it.print(16 + col_width + col_width / 2, 140, id(font_body), fg, TextAlign::TOP_CENTER, indoor_hum);
 
-        it.print(16 + col_width * 2, 116, id(font_label), fg, TextAlign::TOP_LEFT, "[BAT]");
+        // 电池 - 使用图标替代标题（不加粗）
+        it.image(16 + col_width * 2 + col_width / 2 - 12, 114, id(ic_battery), fg, bg);
         char battery[16];
         if (id(bat_voltage).has_state()) {
           int pct = (int)((id(bat_voltage).state - 3.0f) * 100.0f / 1.2f);
@@ -308,13 +384,14 @@ display:
         } else {
           snprintf(battery, sizeof(battery), "--");
         }
-        it.print(16 + col_width * 2 + col_width / 2, 136, id(font_body), fg, TextAlign::TOP_CENTER, battery);
+        it.print(16 + col_width * 2 + col_width / 2, 140, id(font_body), fg, TextAlign::TOP_CENTER, battery);
 
         // 分隔线
         it.filled_rectangle(8, 164, w - 16, 2, fg);
 
         // 任务
-        it.print(16, 172, id(font_label), fg, TextAlign::TOP_LEFT, "[TASKS]");
+        it.print(16, 168, id(font_label), fg, TextAlign::TOP_LEFT, "[TASKS]");
+        it.print(17, 169, id(font_label), fg, TextAlign::TOP_LEFT, "[TASKS]");
         const char* tasks[3] = {"BUY MILK", "REVIEW PR", "WEEKLY REPORT"};
         uint8_t sel = id(g_todo_idx);
         uint8_t done_mask = id(g_todo_state);
@@ -322,24 +399,34 @@ display:
         for (int i = 0; i < 3; i++) {
           bool is_done = (done_mask >> i) & 1;
           char line[48];
-          int y = 190 + i * 21;
+          int y = 196 + i * 21;
           if (i == sel) {
-            it.filled_rectangle(16, y - 2, w - 32, 17, fg);
-            snprintf(line, sizeof(line), "%c %s", is_done ? 'X' : ' ', tasks[i]);
-            it.print(24, y, id(font_label), bg, TextAlign::TOP_LEFT, line);
+            it.filled_rectangle(16, y - 2, w - 32, 18, fg);
+            snprintf(line, sizeof(line), "%s", tasks[i]);
+            // 只有已完成的项才显示勾选图标
+            if (is_done) {
+              it.image(20, y - 2, id(ic_check), bg, fg);
+            }
+            it.print(48, y, id(font_label), bg, TextAlign::TOP_LEFT, line);
           } else {
-            snprintf(line, sizeof(line), "%c %s", is_done ? 'X' : ' ', tasks[i]);
-            it.print(24, y, id(font_label), fg, TextAlign::TOP_LEFT, line);
+            snprintf(line, sizeof(line), "%s", tasks[i]);
+            if (is_done) {
+              it.image(20, y - 2, id(ic_check), fg, bg);
+            }
+            it.print(48, y, id(font_label), fg, TextAlign::TOP_LEFT, line);
           }
         }
 
         // 底部
-        it.filled_rectangle(8, 268, w - 16, 2, fg);
-        it.print(w / 2, 276, id(font_footer), fg, TextAlign::TOP_CENTER, "BOOT=MODE KEY=SELECT");
+        it.filled_rectangle(8, 274, w - 16, 2, fg);
+        it.print(w / 2, 282, id(font_footer), fg, TextAlign::TOP_CENTER, "BOOT=MODE KEY=SELECT");
+        it.print(w / 2 + 1, 283, id(font_footer), fg, TextAlign::TOP_CENTER, "BOOT=MODE KEY=SELECT");
 
       // ============ WORK 模式 ============
       } else {
+        // WORK 标题（加粗）
         it.print(12, 6, id(font_display), fg, TextAlign::TOP_LEFT, "WORK");
+        it.print(13, 7, id(font_display), fg, TextAlign::TOP_LEFT, "WORK");
         char bat_top[32];
         if (id(bat_voltage).has_state()) {
           int pct = (int)((id(bat_voltage).state - 3.0f) * 100.0f / 1.2f);
@@ -349,6 +436,7 @@ display:
         } else {
           snprintf(bat_top, sizeof(bat_top), "BAT:--");
         }
+        // 电池信息（不加粗）
         it.print(w - 12, 6, id(font_label), fg, TextAlign::TOP_RIGHT, bat_top);
         it.filled_rectangle(12, 28, 36, 2, fg);
         it.filled_rectangle(w - 48, 28, 36, 2, fg);
@@ -358,7 +446,9 @@ display:
         if (st == 2) { status_text = "BUILD"; }
         if (st == 3) { status_text = "OK"; }
         if (st == 4) { status_text = "ERR"; }
+        // 状态文字（加粗）
         it.print(w / 2, 36, id(font_display), fg, TextAlign::TOP_CENTER, status_text);
+        it.print(w / 2 + 1, 37, id(font_display), fg, TextAlign::TOP_CENTER, status_text);
 
         char dur[48];
         if (st == 1 || st == 2) {
@@ -368,6 +458,7 @@ display:
         } else {
           snprintf(dur, sizeof(dur), "READY");
         }
+        // 耗时（不加粗）
         it.print(w / 2, 80, id(font_label), fg, TextAlign::TOP_CENTER, dur);
 
         it.filled_rectangle(8, 100, w - 16, 2, fg);
@@ -390,19 +481,26 @@ display:
           }
           char pct[8];
           snprintf(pct, sizeof(pct), "%d%%", progress);
+          // 进度百分比（不加粗）
           it.print(w / 2, bar_y + bar_h + 8, id(font_label), fg, TextAlign::TOP_CENTER, pct);
         } else if (st == 3) {
+          // SUCCESS（加粗）
           it.print(w / 2, 112, id(font_body), fg, TextAlign::TOP_CENTER, "SUCCESS");
+          it.print(w / 2 + 1, 113, id(font_body), fg, TextAlign::TOP_CENTER, "SUCCESS");
         } else if (st == 4) {
+          // ERROR（加粗）
           it.print(w / 2, 112, id(font_body), fg, TextAlign::TOP_CENTER, "ERROR");
+          it.print(w / 2 + 1, 113, id(font_body), fg, TextAlign::TOP_CENTER, "ERROR");
         }
 
         it.filled_rectangle(8, 160, w - 16, 2, fg);
         char proj[64];
         snprintf(proj, sizeof(proj), "%s :: %s", id(g_project).c_str(), id(g_branch).c_str());
+        // 项目信息（不加粗）
         it.print(w / 2, 168, id(font_label), fg, TextAlign::TOP_CENTER, proj);
 
         it.filled_rectangle(8, 192, w - 16, 2, fg);
+        // 操作提示（不加粗）
         if (st == 0) {
           it.print(w / 2, 200, id(font_label), fg, TextAlign::TOP_CENTER, "KEY LONG > START");
         } else if (st == 3) {
@@ -414,6 +512,7 @@ display:
         }
 
         it.filled_rectangle(8, 232, w - 16, 2, fg);
+        // 底部提示（不加粗）
         it.print(w / 2, 240, id(font_footer), fg, TextAlign::TOP_CENTER, "BOOT=MODE");
         it.print(w / 2, 260, id(font_footer), fg, TextAlign::TOP_CENTER, "LONG BOOT > LIFE");
       }

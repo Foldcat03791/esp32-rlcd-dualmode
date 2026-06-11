@@ -36,6 +36,58 @@ captive_portal:
 api:
   encryption:
     key: !secret api_encryption_key
+  services:
+    - service: add_todo
+      variables:
+        title: string
+      then:
+        - lambda: |-
+            uint8_t count = id(g_todo_count);
+            if (count < 10) {
+              id(g_todo_titles)[count] = title;
+              id(g_todo_states)[count] = false;
+              id(g_todo_count) = count + 1;
+              id(my_display).update();
+            }
+
+    - service: edit_todo
+      variables:
+        index: int
+        title: string
+      then:
+        - lambda: |-
+            if (index >= 0 && index < id(g_todo_count)) {
+              id(g_todo_titles)[index] = title;
+              id(my_display).update();
+            }
+
+    - service: delete_todo
+      variables:
+        index: int
+      then:
+        - lambda: |-
+            uint8_t count = id(g_todo_count);
+            if (index >= 0 && index < count) {
+              for (int i = index; i < count - 1; i++) {
+                id(g_todo_titles)[i] = id(g_todo_titles)[i + 1];
+                id(g_todo_states)[i] = id(g_todo_states)[i + 1];
+              }
+              id(g_todo_titles)[count - 1] = "";
+              id(g_todo_states)[count - 1] = false;
+              id(g_todo_count) = count - 1;
+              if (id(g_todo_idx) >= id(g_todo_count) && id(g_todo_count) > 0) {
+                id(g_todo_idx) = id(g_todo_count) - 1;
+              }
+              id(my_display).update();
+            }
+
+    - service: get_todos
+      then:
+        - lambda: |-
+            ESP_LOGD("todo", "TODO List:");
+            for (int i = 0; i < id(g_todo_count); i++) {
+              ESP_LOGD("todo", "%d: %s (%s)", i, id(g_todo_titles)[i].c_str(), id(g_todo_states)[i] ? "done" : "pending");
+            }
 
 ota:
   - platform: esphome
@@ -157,9 +209,19 @@ globals:
     type: uint8_t
     initial_value: "0"
 
-  - id: g_todo_state
+  - id: g_todo_count
     type: uint8_t
-    initial_value: "0"
+    initial_value: "3"
+    restore_value: true
+
+  - id: g_todo_titles
+    type: std::array<std::string, 10>
+    initial_value: '{"BUY MILK", "REVIEW PR", "WEEKLY REPORT", "", "", "", "", "", "", ""}'
+    restore_value: true
+
+  - id: g_todo_states
+    type: std::array<bool, 10>
+    initial_value: '{false, false, false, false, false, false, false, false, false, false}'
     restore_value: true
 
   - id: g_cached_temp
@@ -402,19 +464,19 @@ display:
         // ============ 任务区域 (y=150-240) ============
         it.print(16, 150, id(font_label), fg, TextAlign::TOP_LEFT, "> TASKS");
 
-        const char* tasks[3] = {"BUY MILK", "REVIEW PR", "WEEKLY REPORT"};
         uint8_t sel = id(g_todo_idx);
-        uint8_t done_mask = id(g_todo_state);
+        uint8_t count = id(g_todo_count);
 
-        for (int i = 0; i < 3; i++) {
-          bool is_done = (done_mask >> i) & 1;
+        for (int i = 0; i < count && i < 5; i++) {
+          bool is_done = id(g_todo_states)[i];
+          const char* task_title = id(g_todo_titles)[i].c_str();
           char line[48];
           int y = 172 + i * 22;
           if (i == sel) {
             // 选中项：反色背景
             it.filled_rectangle(16, y - 2, w - 32, 20, fg);
             it.print(20, y, id(font_body), bg, TextAlign::TOP_LEFT, ">>");
-            snprintf(line, sizeof(line), "%s", tasks[i]);
+            snprintf(line, sizeof(line), "%s", task_title);
             if (is_done) {
               // 绘制简单的勾选标记
               it.line(52, y + 6, 58, y + 12, bg);
@@ -424,7 +486,7 @@ display:
           } else {
             // 未选中项
             it.print(20, y, id(font_body), fg, TextAlign::TOP_LEFT, " >");
-            snprintf(line, sizeof(line), "%s", tasks[i]);
+            snprintf(line, sizeof(line), "%s", task_title);
             if (is_done) {
               // 绘制简单的勾选标记
               it.line(52, y + 6, 58, y + 12, fg);
@@ -587,7 +649,8 @@ binary_sensor:
           - lambda: |-
               uint8_t mode = id(g_mode);
               if (mode == 0) {
-                uint8_t new_idx = (id(g_todo_idx) + 1) % 3;
+                uint8_t count = id(g_todo_count);
+                uint8_t new_idx = (id(g_todo_idx) + 1) % (count > 0 ? count : 1);
                 id(g_todo_idx) = new_idx;
               } else {
                 uint8_t new_st = (id(g_work_status) + 1) % 5;
@@ -619,8 +682,9 @@ binary_sensor:
               uint8_t mode = id(g_mode);
               if (mode == 0) {
                 uint8_t idx = id(g_todo_idx);
-                if (idx < 3) {
-                  id(g_todo_state) ^= (1 << idx);
+                uint8_t count = id(g_todo_count);
+                if (idx < count) {
+                  id(g_todo_states)[idx] = !id(g_todo_states)[idx];
                 }
               } else {
                 id(g_work_status) = 0;
